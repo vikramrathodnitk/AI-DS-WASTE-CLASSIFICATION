@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EcoSort – Waste Classifier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.min.js"></script>
+<style>
+  :root{
+    --bg:#e9efec; --surface:#ffffff; --ink:#12302a; --muted:#5b7068; --line:#cfdad5;
+    --accent:#2f6f5e; --accent-soft:#dcebe6;
+    --display:"Bricolage Grotesque","Trebuchet MS",system-ui,sans-serif;
+    --body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.5;min-height:100vh}
+  .wrap{max-width:1080px;margin:0 auto;padding:28px 20px 56px}
+  header{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:28px}
+  .brand{font-family:var(--display);font-weight:800;font-size:1.6rem;letter-spacing:-.02em;display:flex;align-items:center;gap:10px}
+  .brand svg{width:34px;height:34px}
+  .model{display:flex;align-items:center;gap:10px;font-size:.9rem;color:var(--muted)}
+  .dot{width:10px;height:10px;border-radius:50%;background:#c98b2b}
+  .dot.ok{background:#2e9b6a}
+  .dot.err{background:#c2443c}
+  button,.btn{font:inherit;font-weight:600;border:1.5px solid var(--ink);background:transparent;color:var(--ink);padding:8px 14px;border-radius:999px;cursor:pointer}
+  button:hover,.btn:hover{background:var(--ink);color:#fff}
+  button:focus-visible,.btn:focus-visible,.drop:focus-visible{outline:3px solid #f0b429;outline-offset:2px}
+  h1{font-family:var(--display);font-weight:800;font-size:clamp(2rem,5vw,3.2rem);line-height:1.02;letter-spacing:-.03em;margin:0 0 10px;max-width:15ch}
+  .sub{color:var(--muted);max-width:52ch;margin:0 0 28px}
+  .grid{display:grid;grid-template-columns:1.05fr 1fr;gap:20px}
+  @media(max-width:820px){.grid{grid-template-columns:1fr}}
+  .panel{background:var(--surface);border:1px solid var(--line);border-radius:22px;padding:18px}
+  .drop{position:relative;border:2px dashed #9db5ac;border-radius:16px;min-height:360px;display:flex;align-items:center;justify-content:center;text-align:center;cursor:pointer;overflow:hidden;background:#f6faf8;transition:border-color .15s,background .15s}
+  .drop.over{border-color:var(--accent);background:var(--accent-soft)}
+  .drop img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#f6faf8}
+  .drop .hint{padding:24px;max-width:30ch}
+  .drop .hint strong{display:block;font-family:var(--display);font-size:1.35rem;margin-bottom:6px}
+  .drop .hint span{color:var(--muted);font-size:.95rem}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;justify-content:space-between;margin-top:14px}
+  .toggle{display:flex;align-items:center;gap:8px;font-size:.92rem;color:var(--muted)}
+  .toggle input{accent-color:var(--accent);width:17px;height:17px}
+  .result{display:flex;flex-direction:column;gap:16px}
+  .verdict{border-radius:16px;padding:22px;background:var(--accent-soft);border-left:10px solid var(--accent);transition:background .25s,border-color .25s}
+  .verdict .name{font-family:var(--display);font-weight:800;font-size:clamp(2rem,5vw,2.9rem);line-height:1;letter-spacing:-.03em;text-transform:capitalize}
+  .verdict .conf{margin-top:6px;font-weight:600}
+  .verdict .tip{margin-top:10px;color:var(--muted);font-size:.95rem}
+  .verdict.empty{--accent:#9db5ac;background:#f1f5f3}
+  .verdict.empty .name{font-size:1.4rem;line-height:1.2;letter-spacing:-.01em;text-transform:none;font-weight:700}
+  .bars{display:flex;flex-direction:column;gap:11px}
+  .bar{display:grid;grid-template-columns:92px 1fr 52px;align-items:center;gap:10px;font-size:.93rem}
+  .bar .lbl{text-transform:capitalize;font-weight:500}
+  .track{height:12px;background:#e6eeea;border-radius:99px;overflow:hidden}
+  .fill{height:100%;width:0;border-radius:99px;transition:width .45s cubic-bezier(.2,.8,.2,1)}
+  .pct{text-align:right;font-variant-numeric:tabular-nums;color:var(--muted)}
+  .meta{font-size:.85rem;color:var(--muted)}
+  .warn{background:#fff3d6;border:1px solid #ecd08a;color:#6a4b08;border-radius:12px;padding:10px 12px;font-size:.92rem}
+  .hidden{display:none!important}
+  .spinner{width:22px;height:22px;border:3px solid #cfdad5;border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @media(prefers-reduced-motion:reduce){.spinner{animation-duration:2s}.fill{transition:none}}
+  footer{margin-top:26px;font-size:.85rem;color:var(--muted)}
+  input[type=file]{display:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <svg viewBox="0 0 40 40" aria-hidden="true"><rect width="40" height="40" rx="11" fill="#12302a"/><path d="M12 24l5-9 3 5 2-3 6 7z" fill="#7fd1ae"/><circle cx="26" cy="14" r="3" fill="#f0b429"/></svg>
+      EcoSort
+    </div>
+    <div class="model">
+      <span class="dot" id="dot"></span><span id="modelStatus">Loading model…</span>
+      <label class="btn" for="modelFile" id="modelBtn">Choose model.onnx</label>
+      <input type="file" id="modelFile" accept=".onnx">
+    </div>
+  </header>
+
+  <h1>Which bin does this go in?</h1>
+  <p class="sub">Upload a photo of a waste item. The model sorts it into cardboard, glass, metal, paper, plastic or trash, entirely in your browser.</p>
+
+  <div class="grid">
+    <section class="panel" aria-label="Image upload">
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Upload an image: click, drop, or paste">
+        <img id="preview" class="hidden" alt="Uploaded item">
+        <div class="hint" id="hint"><strong>Drop an image here</strong><span>Any format and any size: JPG, PNG, WebP, HEIC, TIFF, AVIF, GIF, BMP and more. Click to browse, paste, or take a photo on your phone.</span></div>
+      </div>
+      <input type="file" id="imgFile" accept="image/*,.heic,.heif,.tif,.tiff,.avif,.jfif,.bmp,.ico,.svg,.gif,.webp">
+      <div class="row">
+        <label class="toggle"><input type="checkbox" id="tta" checked> Flip-check for steadier results</label>
+        <button id="clear" class="hidden">Clear image</button>
+      </div>
+    </section>
+
+    <section class="panel result" aria-live="polite">
+      <div class="verdict empty" id="verdict">
+        <div class="name" id="vName">Waiting for an image</div>
+        <div class="conf" id="vConf"></div>
+        <div class="tip" id="vTip">Results appear here as soon as you add a photo.</div>
+      </div>
+      <div class="warn hidden" id="warn">The model is not very sure about this one. Try a closer photo on a plain background with the item filling the frame.</div>
+      <div class="bars" id="bars"></div>
+      <div class="meta" id="meta"></div>
+    </section>
+  </div>
+
+  <footer>Any image is converted and resized to 96×96, then normalised like the training script. Transparent areas are filled white. The image never leaves your device.</footer>
+</div>
+
+<script>
+const CLASSES = ["cardboard","glass","metal","paper","plastic","trash"];
+const MEAN = [0.485,0.456,0.406], STD = [0.229,0.224,0.225], SIZE = 96;
+const INFO = {
+  cardboard:{color:"#b07a3c", soft:"#f3e6d3", tip:"Flatten the box and keep it dry. Greasy pizza-box lids go in general waste."},
+  glass:{color:"#2a9d99", soft:"#d8efee", tip:"Rinse bottles and jars. Lids go separately, and broken window glass or mirrors are not recyclable."},
+  metal:{color:"#5a6f8c", soft:"#dde4ee", tip:"Rinse cans and foil. Aerosols should be completely empty."},
+  paper:{color:"#c9a227", soft:"#f6edc8", tip:"Keep it clean and dry. Wet, waxed or food-stained paper is not recyclable."},
+  plastic:{color:"#2f6fd0", soft:"#d9e5f8", tip:"Empty and rinse containers. Check the number on the base for your local rules."},
+  trash:{color:"#6b6f6d", soft:"#e4e6e5", tip:"This goes in general waste. If you are unsure, check whether a take-back scheme exists."}
+};
+const $ = id => document.getElementById(id);
+let session = null, currentImg = null;
+
+/* ---------- model loading (fetch, IndexedDB cache, or file picker) ---------- */
+ort.env.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/";
+ort.env.wasm.numThreads = 1;
+
+function setStatus(text, state){ $("modelStatus").textContent = text; $("dot").className = "dot " + (state||""); }
+
+const DB = { open(){ return new Promise((res,rej)=>{ const r=indexedDB.open("ecosort",1); r.onupgradeneeded=()=>r.result.createObjectStore("m"); r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error); }); },
+  async get(){ const db=await this.open(); return new Promise((res)=>{ const q=db.transaction("m").objectStore("m").get("model"); q.onsuccess=()=>res(q.result); q.onerror=()=>res(null); }); },
+  async set(v){ const db=await this.open(); return new Promise((res)=>{ const t=db.transaction("m","readwrite"); t.objectStore("m").put(v,"model"); t.oncomplete=()=>res(); t.onerror=()=>res(); }); } };
+
+async function loadSession(buffer, name){
+  setStatus("Preparing model…");
+  try{
+    session = await ort.InferenceSession.create(buffer, {executionProviders:["wasm"]});
+    setStatus("Model loaded: " + name, "ok");
+    if(currentImg) classify();
+  }catch(e){
+    console.error(e); session = null;
+    setStatus("Could not load this model. Choose a valid model.onnx.", "err");
+  }
+}
+
+async function initModel(){
+  try{
+    const r = await fetch("model.onnx");
+    if(r.ok){ await loadSession(await r.arrayBuffer(), "model.onnx"); return; }
+  }catch(e){}
+  try{
+    const cached = await DB.get();
+    if(cached){ await loadSession(cached.buffer, cached.name + " (saved)"); return; }
+  }catch(e){}
+  setStatus("No model yet. Choose your model.onnx file.", "err");
+}
+
+$("modelFile").addEventListener("change", async e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const buffer = await f.arrayBuffer();
+  try{ await DB.set({buffer, name:f.name}); }catch(err){}
+  loadSession(buffer, f.name);
+});
+
+/* ---------- image input ---------- */
+const drop = $("drop");
+drop.addEventListener("click", ()=>$("imgFile").click());
+drop.addEventListener("keydown", e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); $("imgFile").click(); }});
+["dragenter","dragover"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add("over");}));
+["dragleave","drop"].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove("over");}));
+drop.addEventListener("drop", e=>{ const f=e.dataTransfer.files[0]; if(f) handleFile(f); });
+$("imgFile").addEventListener("change", e=>{ const f=e.target.files[0]; if(f) handleFile(f); e.target.value=""; });
+document.addEventListener("paste", e=>{
+  for(const it of (e.clipboardData||{}).items||[]) if(it.type.startsWith("image/")){ handleFile(it.getAsFile()); break; }
+});
+$("tta").addEventListener("change", ()=>{ if(currentImg) classify(); });
+$("clear").addEventListener("click", reset);
+
+/* ---------- universal image decoding (any format, any size) ---------- */
+const MAXWORK = 1280;   // longest side of the working copy kept in memory
+const HEIC_URL = "https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js";
+const UTIF_URL = "https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js";
+const loaded = {};
+const loadScript = src => new Promise((res,rej)=>{
+  if(loaded[src]) return res();
+  const s = document.createElement("script"); s.src = src;
+  s.onload = ()=>{ loaded[src] = true; res(); };
+  s.onerror = ()=>rej(new Error("Could not load " + src));
+  document.head.appendChild(s);
+});
+const extOf = f => ((f.name||"").split(".").pop() || "").toLowerCase();
+
+/* Halve repeatedly until near the target size, then let the caller do the last step.
+   This avoids the aliasing you get from shrinking a 12 MP photo to 96 px in one go. */
+function downscale(src, sw, sh, tw, th){
+  let cur = src, cw = sw, ch = sh;
+  while(cw/2 >= tw || ch/2 >= th){
+    const nw = Math.max(tw, Math.floor(cw/2)), nh = Math.max(th, Math.floor(ch/2));
+    const c = document.createElement("canvas"); c.width = nw; c.height = nh;
+    const g = c.getContext("2d");
+    g.fillStyle = "#fff"; g.fillRect(0,0,nw,nh);
+    g.imageSmoothingQuality = "high";
+    g.drawImage(cur, 0, 0, cw, ch, 0, 0, nw, nh);
+    cur = c; cw = nw; ch = nh;
+  }
+  return {el:cur, w:cw, h:ch};
+}
+
+async function decodeToDrawable(file){
+  const ext = extOf(file), type = (file.type||"").toLowerCase();
+  let blob = file;
+  if(/hei[cf]/.test(ext) || /hei[cf]/.test(type)){            // iPhone photos
+    await loadScript(HEIC_URL);
+    const out = await heic2any({blob:file, toType:"image/jpeg", quality:0.92});
+    blob = Array.isArray(out) ? out[0] : out;
+  } else if(ext === "tif" || ext === "tiff" || type === "image/tiff"){   // TIFF
+    await loadScript(UTIF_URL);
+    const buf = await file.arrayBuffer();
+    const ifds = UTIF.decode(buf); UTIF.decodeImage(buf, ifds[0]);
+    const w = ifds[0].width, h = ifds[0].height;
+    const rgba = new Uint8ClampedArray(UTIF.toRGBA8(ifds[0]));
+    const c = document.createElement("canvas"); c.width = w; c.height = h;
+    c.getContext("2d").putImageData(new ImageData(rgba, w, h), 0, 0);
+    return {el:c, w, h};
+  }
+  try{                                                          // JPG, PNG, WebP, AVIF, GIF, BMP...
+    const bmp = await createImageBitmap(blob);                  // honours EXIF rotation
+    return {el:bmp, w:bmp.width, h:bmp.height};
+  }catch(e){}
+  return await new Promise((res,rej)=>{                         // fallback, also handles SVG
+    const url = URL.createObjectURL(blob), im = new Image();
+    im.onload = ()=>res({el:im, w:im.naturalWidth || 512, h:im.naturalHeight || 512});
+    im.onerror = ()=>rej(new Error("decode failed"));
+    im.src = url;
+  });
+}
+
+async function handleFile(file){
+  showMessage("Reading image…", "Large or unusual formats can take a moment.");
+  try{
+    const d = await decodeToDrawable(file);
+    if(!d.w || !d.h) throw new Error("empty image");
+    const s = Math.min(1, MAXWORK / Math.max(d.w, d.h));
+    const tw = Math.max(1, Math.round(d.w*s)), th = Math.max(1, Math.round(d.h*s));
+    const r = downscale(d.el, d.w, d.h, tw, th);
+    const c = document.createElement("canvas"); c.width = tw; c.height = th;
+    const g = c.getContext("2d");
+    g.fillStyle = "#fff"; g.fillRect(0,0,tw,th);               // transparent areas become white
+    g.imageSmoothingQuality = "high";
+    g.drawImage(r.el, 0, 0, r.w, r.h, 0, 0, tw, th);
+    if(d.el.close) d.el.close();
+    currentImg = c;
+    $("preview").src = c.toDataURL("image/jpeg", 0.92);        // preview works for every format
+    $("preview").classList.remove("hidden");
+    $("hint").classList.add("hidden"); $("clear").classList.remove("hidden");
+    classify();
+  }catch(e){
+    console.error(e);
+    showMessage("Could not read this image", "The file may be corrupted or in an unsupported format. Try saving it as JPG or PNG.");
+  }
+}
+
+function reset(){
+  currentImg = null;
+  $("preview").classList.add("hidden"); $("hint").classList.remove("hidden"); $("clear").classList.add("hidden");
+  $("bars").innerHTML = ""; $("meta").textContent = ""; $("warn").classList.add("hidden");
+  const v = $("verdict"); v.className = "verdict empty"; v.style.removeProperty("--accent"); v.style.background = "";
+  showMessage("Waiting for an image", "Results appear here as soon as you add a photo.");
+}
+function showMessage(title, tip){ $("vName").textContent = title; $("vConf").textContent = ""; $("vTip").textContent = tip; }
+
+/* ---------- preprocessing identical to training: squash-resize, /255, mean/std, CHW ---------- */
+const cv = document.createElement("canvas"); cv.width = cv.height = SIZE;
+const ctx = cv.getContext("2d", {willReadFrequently:true});
+function toTensorData(src, flip){
+  const r = downscale(src, src.width, src.height, SIZE, SIZE);
+  ctx.fillStyle = "#fff"; ctx.fillRect(0,0,SIZE,SIZE);
+  ctx.save();
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = "high";
+  if(flip){ ctx.translate(SIZE,0); ctx.scale(-1,1); }
+  ctx.drawImage(r.el, 0, 0, r.w, r.h, 0, 0, SIZE, SIZE);
+  ctx.restore();
+  const d = ctx.getImageData(0,0,SIZE,SIZE).data, n = SIZE*SIZE, out = new Float32Array(3*n);
+  for(let i=0;i<n;i++){
+    out[i]       = (d[i*4]   /255 - MEAN[0]) / STD[0];
+    out[n + i]   = (d[i*4+1] /255 - MEAN[1]) / STD[1];
+    out[2*n + i] = (d[i*4+2] /255 - MEAN[2]) / STD[2];
+  }
+  return out;
+}
+function softmax(a){ const m=Math.max(...a), e=a.map(v=>Math.exp(v-m)), s=e.reduce((x,y)=>x+y,0); return e.map(v=>v/s); }
+async function infer(data){
+  const out = await session.run({input: new ort.Tensor("float32", data, [1,3,SIZE,SIZE])});
+  return softmax(Array.from(out[Object.keys(out)[0]].data));
+}
+
+/* ---------- classify + render ---------- */
+async function classify(){
+  if(!currentImg) return;
+  if(!session){ showMessage("Model not loaded", "Choose your model.onnx file at the top right."); return; }
+  const t0 = performance.now();
+  let p = await infer(toTensorData(currentImg,false));
+  if($("tta").checked){
+    const q = await infer(toTensorData(currentImg,true));
+    p = p.map((v,i)=>(v+q[i])/2);
+  }
+  const ms = performance.now() - t0;
+  render(p, ms);
+}
+
+function render(p, ms){
+  const order = p.map((v,i)=>[v,i]).sort((a,b)=>b[0]-a[0]);
+  const [topP, topI] = order[0], cls = CLASSES[topI], info = INFO[cls];
+  const v = $("verdict");
+  v.className = "verdict"; v.style.setProperty("--accent", info.color); v.style.background = info.soft;
+  $("vName").textContent = cls;
+  $("vConf").textContent = (topP*100).toFixed(1) + "% confident";
+  $("vTip").textContent = info.tip;
+  $("warn").classList.toggle("hidden", topP >= 0.6);
+  $("bars").innerHTML = order.map(([val,i])=>`
+    <div class="bar"><span class="lbl">${CLASSES[i]}</span>
+      <div class="track"><div class="fill" style="background:${INFO[CLASSES[i]].color}" data-w="${(val*100).toFixed(1)}"></div></div>
+      <span class="pct">${(val*100).toFixed(1)}%</span></div>`).join("");
+  requestAnimationFrame(()=>requestAnimationFrame(()=>document.querySelectorAll(".fill").forEach(f=>f.style.width=f.dataset.w+"%")));
+  $("meta").textContent = `Classified in ${ms.toFixed(0)} ms` + ($("tta").checked ? " with flip-check." : ".");
+}
+
+initModel();
+</script>
+</body>
+</html>
