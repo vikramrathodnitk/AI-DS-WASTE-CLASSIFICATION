@@ -43,17 +43,21 @@ We also created a web interface separately, through which users can upload waste
 
 We collected our waste image dataset from Kaggle. From the available images, we manually selected the required images and removed poor-quality images to improve the quality of our dataset.
 
-The final dataset contains **3,000 images** divided into training and validation sets.
+**Dataset source:** [Kaggle Waste Classification Dataset](https://www.kaggle.com/datasets/kinjalbarman/waste-classification-cleaned-dataset)
 
-| Waste Category | Training Images | Validation Images |
-| -------------- | --------------: | ----------------: |
-| Cardboard      |             400 |               100 |
-| Glass          |             400 |               100 |
-| Metal          |             400 |               100 |
-| Paper          |             400 |               100 |
-| Plastic        |             400 |               100 |
-| Trash          |             400 |               100 |
-| **Total**      |       **2,400** |           **600** |
+The intended dataset contains 3,000 images divided into training and validation sets.
+
+| Waste Category | Expected Training Images | Validation Images |
+| -------------- | -----------------------: | ----------------: |
+| Cardboard      |                      400 |               100 |
+| Glass          |                      400 |               100 |
+| Metal          |                      400 |               100 |
+| Paper          |                      400 |               100 |
+| Plastic        |                      400 |               100 |
+| Trash          |                      400 |               100 |
+| **Total**      |                **2,400** |           **600** |
+
+**Dataset note:** The image counts above describe the intended dataset arrangement. Always run `download_data.py` to check the actual number of images available in your local folders before training. The scripts support JPG, JPEG, JFIF, PNG, BMP and WEBP image formats.
 
 ### Dataset Organization
 
@@ -168,92 +172,3 @@ AI-DS-Waste-Classification/
             ├── paper/
             ├── plastic/
             └── trash/
-```
-
-*Note: `model.onnx` is generated after model training and export. The web interface source files are maintained separately and are not included in this project folder.*
-
-## 8. Installation and Execution
-
-Run the following commands from the `AI-DS-Waste-Classification` project directory.
-
-### Step 1: Install Required Libraries
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-### Step 2: Prepare the Dataset
-
-Place the dataset in the following structure:
-
-```text
-data/public/train/
-data/public/val/
-```
-
-Each folder must contain the six class folders with their respective images.
-
-Run the dataset preparation script:
-
-```bash
-python download_data.py
-```
-
-### Step 3: Train the CNN Model
-
-Run the training script:
-
-```bash
-python train_template.py --data_dir data/public --epochs 10 --batch_size 32 --lr 0.001 --output model.onnx
-```
-
-The script trains the CNN model using the training dataset, evaluates it using the validation dataset, and exports the trained model in ONNX format.
-
-### Step 4: Verify the Exported Model
-
-```bash
-python verify_submission.py --model model.onnx --val_dir data/public/val
-```
-
-The verification script is used to examine the exported model, including its input and output shapes, model size, parameter count, CPU inference latency, and validation accuracy.
-
-## 9. Results and Evaluation
-
-The model is evaluated using the validation dataset.
-
-The following measurements are used to understand its performance:
-
-- **Validation Accuracy:** Measures how many validation images are classified correctly.
-- **Model Size:** Shows the storage size of the exported ONNX model.
-- **Parameter Count:** Represents the number of learnable parameters in the model.
-- **CPU Inference Latency:** Measures the time required to make a prediction on the CPU.
-
-### Performance Results
-
-| Evaluation Metric    | Result |
-| -------------------- | ------ |
-| Validation Accuracy  |        |
-| ONNX Model Size      |        |
-| Number of Parameters |        |
-| Average CPU Latency  |        |
-
-## 10. Conclusion
-
-This project demonstrates the application of deep learning in waste classification using a Convolutional Neural Network.
-
-By collecting and preparing waste images, developing a CNN model, training it with PyTorch, and exporting it into ONNX format, we created a system capable of classifying waste into six categories.
-
-The project also helped us understand image preprocessing, CNN architecture, model training, evaluation, and the use of AI in practical environmental applications.
-
-## 11. Learning Outcomes
-
-Through this project, we gained practical experience in:
-
-- Understanding image classification and CNNs.
-- Collecting, selecting, and organizing image datasets.
-- Applying image preprocessing and data augmentation.
-- Developing and training a deep learning model using PyTorch.
-- Evaluating model performance using validation data.
-- Exporting a trained model into ONNX format.
-- Understanding model size, parameters, and inference latency.
-- Connecting an AI-based classification task with a web interface.
