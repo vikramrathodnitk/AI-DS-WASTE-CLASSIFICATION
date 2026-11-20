@@ -1,4 +1,3 @@
-
 """
 Dataset Preparation and Validation
 Project: Waste Classification Using CNN
@@ -54,9 +53,11 @@ EXPECTED_CLASSES = [
 ]
 
 # Supported image formats.
+# JFIF is included because some images in our dataset use this format.
 IMAGE_EXTENSIONS = {
     ".jpg",
     ".jpeg",
+    ".jfif",
     ".png",
     ".bmp",
     ".webp",
