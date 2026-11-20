@@ -1,4 +1,3 @@
-
 """
 Model Evaluation and Verification
 Project: Waste Classification Using CNN
@@ -43,9 +42,11 @@ CLASS_NAMES = [
 ]
 
 # Supported image formats.
+# JFIF is included because some dataset images use this format.
 IMAGE_EXTENSIONS = (
     ".jpg",
     ".jpeg",
+    ".jfif",
     ".png",
     ".bmp",
     ".webp",
@@ -215,14 +216,20 @@ def evaluate_validation(
                 f"Class folder not found: {class_dir}"
             )
 
-        # Find supported images, including images
-        # inside subfolders.
-        image_paths = sorted(
-            path
-            for path in os.scandir(class_dir)
-            if path.is_file()
-            and path.name.lower().endswith(IMAGE_EXTENSIONS)
-        )
+        # Find supported images in the class folder.
+        # Convert entries into a list and sort by filename.
+        # Sorting DirEntry objects directly causes a TypeError.
+        with os.scandir(class_dir) as entries:
+
+            image_paths = sorted(
+                (
+                    path
+                    for path in entries
+                    if path.is_file()
+                    and path.name.lower().endswith(IMAGE_EXTENSIONS)
+                ),
+                key=lambda path: path.name.lower()
+            )
 
         # Evaluate each image.
         for image_entry in image_paths:
